@@ -39,11 +39,16 @@
     class SpaceShooterScene extends Phaser.Scene {
         constructor() {
             super('SpaceShooterScene');
+            this.resetGameState();
+        }
+
+        resetGameState() {
             this.gameState = {
                 score: 0,
                 lives: 3,
                 level: 1,
-                isInvulnerable: false
+                isInvulnerable: false,
+                gameOver: false
             };
         }
 
@@ -100,7 +105,7 @@
                 'ship'
             );
             this.player.setCollideWorldBounds(true);
-            this.player.setDrag(100);
+            this.player.setDrag(100);  // Adds friction to stop movement
             this.player.setMaxVelocity(300);
         }
 
@@ -127,12 +132,27 @@
         }
 
         update(time) {
-            this.handlePlayerMovement();
-            this.handleShooting();
-            this.wrapWorldBounds(this.asteroidsGroup);
+            if (!this.gameState.gameOver) {
+                this.handlePlayerMovement();
+                this.handleShooting();
+                this.wrapWorldBounds(this.asteroidsGroup);
+            } else {
+                // Handle restart
+                if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
+                    this.scene.restart();
+                }
+            }
         }
 
         handlePlayerMovement() {
+            // Reset velocity when no keys are pressed
+            if (!this.cursors.left.isDown && !this.cursors.right.isDown) {
+                this.player.setVelocityX(0);
+            }
+            if (!this.cursors.up.isDown && !this.cursors.down.isDown) {
+                this.player.setVelocityY(0);
+            }
+
             // Movement
             if (this.cursors.left.isDown) {
                 this.player.setVelocityX(-300);
@@ -272,8 +292,8 @@
         }
 
         handlePlayerAsteroidCollision(player, asteroid) {
-            // Only process if not already invulnerable
-            if (!this.gameState.isInvulnerable) {
+            // Only process if not already invulnerable and game is not over
+            if (!this.gameState.isInvulnerable && !this.gameState.gameOver) {
                 // Destroy asteroid
                 asteroid.destroy();
 
@@ -302,18 +322,22 @@
         }
 
         gameOver() {
-            // Stop the game
-            this.scene.restart();
+            // Set game over state
+            this.gameState.gameOver = true;
 
-            // Reset game state
-            this.gameState.lives = 3;
-            this.gameState.score = 0;
-            this.gameState.level = 1;
+            // Clear existing asteroids and bullets
+            this.asteroidsGroup.clear(true, true);
+            this.bulletsGroup.clear(true, true);
 
-            // Update HUD
-            this.livesText.setText(`Lives: ${this.gameState.lives}`);
-            this.scoreText.setText('Score: 0');
-            this.levelText.setText('Level: 1');
+            // Show game over text
+            this.add.text(WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2, 
+                `GAME OVER\nScore: ${this.gameState.score}\n\nPress SPACE to Restart`, 
+                { 
+                    fontSize: '32px', 
+                    fill: '#fff', 
+                    align: 'center' 
+                }
+            ).setOrigin(0.5);
         }
     }
 
