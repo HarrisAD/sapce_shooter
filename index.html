@@ -36,6 +36,296 @@
     const WINDOW_WIDTH = window.innerWidth > 800 ? 800 : window.innerWidth - 20;
     const WINDOW_HEIGHT = window.innerHeight > 600 ? 600 : window.innerHeight - 100;
 
+    // Game States
+    const MENU = 0;
+    const PLAYING = 1;
+    const GAME_OVER = 2;
+
+    class SpaceShooterScene extends Phaser.Scene {
+        constructor() {
+            super('SpaceShooterScene');
+            this.state = MENU;
+            this.score = 0;
+            this.highScore = 0;
+            this.level = 1;
+        }
+
+        preload() {
+            // Load images from GitHub Pages relative path
+            this.load.image('ship', 'static/player_ship.png');
+            this.load.image('asteroid', 'static/asteroid.png');
+            this.load.image('bullet', 'static/bullet.png');
+        }
+
+        create() {
+            // Background
+            this.cameras.main.setBackgroundColor('#000000');
+
+            // Create groups
+            this.asteroidsGroup = this.physics.add.group();
+            this.bulletsGroup = this.physics.add.group();
+
+            // Create player
+            this.createPlayer();
+
+            // Text
+            this.scoreText = this.add.text(16, 16, 'Score: 0', { fontSize: '24px', fill: '#fff' });
+            this.levelText = this.add.text(16, 50, 'Level: 1', { fontSize: '24px', fill: '#fff' });
+            this.livesText = this.add.text(16, 84, 'Lives: 3', { fontSize: '24px', fill: '#fff' });
+
+            // Menu text
+            this.menuText = this.add.text(
+                WINDOW_WIDTH / 2, 
+                WINDOW_HEIGHT / 2, 
+                'SPACE SHOOTER\n\nPress SPACE to Start', 
+                { 
+                    fontSize: '32px', 
+                    fill: '#fff', 
+                    align: 'center' 
+                }
+            ).setOrigin(0.5);
+
+            // Input
+            this.cursors = this.input.keyboard.createCursorKeys();
+            this.aKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
+            this.dKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
+            this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+
+            // Collision detection
+            this.physics.add.collider(this.bulletsGroup, this.asteroidsGroup, this.handleBulletAsteroidCollision, null, this);
+            this.physics.add.collider(this.player, this.asteroidsGroup, this.handlePlayerAsteroidCollision, null, this);
+        }
+
+        createPlayer() {
+            // Create player at the bottom center of the screen
+            this.player = this.physics.add.sprite(WINDOW_WIDTH / 2, WINDOW_HEIGHT - 100, 'ship');
+            this.player.setCollideWorldBounds(true);
+            
+            // Player properties
+            this.player.lives = 3;
+            this.player.angle = 0;
+            this.player.invulnerable = false;
+            this.player.invulnerableTimer = 0;
+        }
+
+        update(time, delta) {
+            if (this.state === MENU) {
+                this.handleMenuInput();
+                return;
+            }
+
+            if (this.state === PLAYING) {
+                this.handlePlayerMovement();
+                this.handleShooting();
+                this.wrapAsteroids();
+                this.handlePlayerInvulnerability(time);
+            }
+        }
+
+        handleMenuInput() {
+            if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
+                this.startNewGame();
+            }
+        }
+
+        startNewGame() {
+            this.state = PLAYING;
+            this.score = 0;
+            this.level = 1;
+            this.scoreText.setText('Score: 0');
+            this.levelText.setText('Level: 1');
+            this.livesText.setText('Lives: 3');
+            this.menuText.setVisible(false);
+
+            // Clear existing asteroids and bullets
+            this.asteroidsGroup.clear(true, true);
+            this.bulletsGroup.clear(true, true);
+
+            // Reset player
+            if (this.player) this.player.destroy();
+            this.createPlayer();
+
+            // Spawn initial asteroids
+            this.spawnInitialAsteroids(5);
+        }
+
+        handlePlayerMovement() {
+            // Reset velocity
+            this.player.setVelocity(0);
+
+            // Movement
+            if (this.cursors.left.isDown) {
+                this.player.setVelocityX(-300);
+            } else if (this.cursors.right.isDown) {
+                this.player.setVelocityX(300);
+            }
+
+            if (this.cursors.up.isDown) {
+                this.player.setVelocityY(-300);
+            } else if (this.cursors.down.isDown) {
+                this.player.setVelocityY(300);
+            }
+
+            // Rotation
+            if (this.aKey.isDown) {
+                this.player.angle -= 3;
+            }
+            if (this.dKey.isDown) {
+                this.player.angle += 3;
+            }
+        }
+
+        handleShooting() {
+            if (this.spaceKey.isDown) {
+                this.shootBullet();
+            }
+        }
+
+        shootBullet() {
+            const time = this.time.now;
+            if (!this.lastBulletTime || time - this.lastBulletTime > 250) {
+                // Calculate bullet spawn position based on ship's rotation
+                const angle = Phaser.Math.DegToRad(this.player.angle - 90);
+                const bulletX = this.player.x + Math.cos(angle) * 25;
+                const bulletY = this.player.y + Math.sin(angle) * 25;
+
+                const bullet = this.bulletsGroup.create(bulletX, bulletY, 'bullet');
+                bullet.setVelocity(
+                    Math.cos(angle) * 500, 
+                    Math.sin(angle) * 500
+                );
+
+                this.lastBulletTime = time;
+
+                // Remove bullet after 2 seconds
+                this.time.delayedCall(2000, () => {
+                    if (bullet.active) bullet.destroy();
+                });
+            }
+        }
+
+        spawnInitialAsteroids(count) {
+            for (let i = 0; i < count; i++) {
+                this.spawnAsteroid(3);
+            }
+        }
+
+        spawnAsteroid(size) {
+            // Spawn at the edge of the screen
+            const side = Phaser.Math.Between(0, 3);
+            let x, y;
+
+            switch(side) {
+                case 0: // Top
+                    x = Phaser.Math.Between(0, WINDOW_WIDTH);
+                    y = -50;
+                    break;
+                case 1: // Right
+                    x = WINDOW_WIDTH + 50;
+                    y = Phaser.Math.Between(0, WINDOW_HEIGHT);
+                    break;
+                case 2: // Bottom
+                    x = Phaser.Math.Between(0, WINDOW_WIDTH);
+                    y = WINDOW_HEIGHT + 50;
+                    break;
+                case 3: // Left
+                    x = -50;
+                    y = Phaser.Math.Between(0, WINDOW_HEIGHT);
+                    break;
+            }
+
+            const asteroid = this.asteroidsGroup.create(x, y, 'asteroid');
+            
+            // Set asteroid properties
+            asteroid.size = size;
+            asteroid.setScale(size / 3);  // Adjust size visually
+            
+            // Random movement
+            const speed = 4 - size;
+            const angle = Phaser.Math.DegToRad(Phaser.Math.Between(0, 360));
+            asteroid.setVelocity(
+                Math.cos(angle) * speed * 100, 
+                Math.sin(angle) * speed * 100
+            );
+            asteroid.setAngularVelocity(Phaser.Math.Between(-50, 50));
+        }
+
+        wrapAsteroids() {
+            this.asteroidsGroup.children.entries.forEach(asteroid => {
+                if (asteroid.x > WINDOW_WIDTH) asteroid.x = 0;
+                if (asteroid.x < 0) asteroid.x = WINDOW_WIDTH;
+                if (asteroid.y > WINDOW_HEIGHT) asteroid.y = 0;
+                if (asteroid.y < 0) asteroid.y = WINDOW_HEIGHT;
+            });
+        }
+
+        handlePlayerInvulnerability(time) {
+            if (this.player.invulnerable) {
+                // Check if invulnerability period is over
+                if (time - this.player.invulnerableTimer > 3000) {
+                    this.player.invulnerable = false;
+                    this.player.setAlpha(1);
+                } else {
+                    // Make player flash
+                    this.player.setAlpha(Math.sin(time * 0.1) > 0 ? 1 : 0.5);
+                }
+            }
+        }
+
+        handleBulletAsteroidCollision(bullet, asteroid) {
+            bullet.destroy();
+
+            // Reduce asteroid size
+            if (asteroid.size > 1) {
+                // Spawn two smaller asteroids
+                this.spawnAsteroid(asteroid.size - 1);
+                this.spawnAsteroid(asteroid.size - 1);
+            }
+
+            // Destroy the original asteroid
+            asteroid.destroy();
+
+            // Increase score
+            this.score += (4 - asteroid.size) * 100;
+            this.scoreText.setText(`Score: ${this.score}`);
+
+            // Update high score
+            if (this.score > this.highScore) {
+                this.highScore = this.score;
+            }
+
+            // Level progression
+            if (this.asteroidsGroup.getChildren().length === 0) {
+                this.level++;
+                this.levelText.setText(`Level: ${this.level}`);
+                this.spawnInitialAsteroids(3 + this.level);
+            }
+        }
+
+        handlePlayerAsteroidCollision(player, asteroid) {
+            // Only process collision if not invulnerable
+            if (!player.invulnerable) {
+                // Destroy asteroid
+                asteroid.destroy();
+
+                // Reduce lives
+                player.lives--;
+                this.livesText.setText(`Lives: ${player.lives}`);
+
+                // Make player invulnerable
+                player.invulnerable = true;
+                player.invulnerableTimer = this.time.now;
+
+                // Check game over
+                if (player.lives <= 0) {
+                    this.state = MENU;
+                    this.menuText.setText(`GAME OVER\n\nScore: ${this.score}\nHigh Score: ${this.highScore}\n\nPress SPACE to Restart`);
+                    this.menuText.setVisible(true);
+                }
+            }
+        }
+    }
+
     const config = {
         type: Phaser.AUTO,
         width: WINDOW_WIDTH,
@@ -48,139 +338,10 @@
                 debug: false
             }
         },
-        scene: {
-            preload: preload,
-            create: create,
-            update: update
-        }
+        scene: SpaceShooterScene
     };
 
     const game = new Phaser.Game(config);
-    let player, cursors, bullets, asteroids;
-    let score = 0, scoreText, lives = 3, livesText;
-
-    function preload() {
-        // Load images from GitHub Pages relative path
-        this.load.image('ship', 'static/player_ship.png');
-        this.load.image('asteroid', 'static/asteroid.png');
-        this.load.image('bullet', 'static/bullet.png');
-    }
-
-    function create() {
-        // Background
-        this.cameras.main.setBackgroundColor('#000000');
-
-        // Create player
-        player = this.physics.add.sprite(WINDOW_WIDTH/2, WINDOW_HEIGHT-100, 'ship');
-        player.setCollideWorldBounds(true);
-
-        // Create groups
-        bullets = this.physics.add.group();
-        asteroids = this.physics.add.group();
-
-        // Keyboard input
-        cursors = this.input.keyboard.createCursorKeys();
-
-        // Score and lives text
-        scoreText = this.add.text(16, 16, 'Score: 0', { fontSize: '24px', fill: '#fff' });
-        livesText = this.add.text(16, 50, 'Lives: 3', { fontSize: '24px', fill: '#fff' });
-
-        // Spawn initial asteroids
-        for (let i = 0; i < 5; i++) {
-            createAsteroid(this);
-        }
-
-        // Collision detection
-        this.physics.add.collider(bullets, asteroids, handleBulletAsteroidCollision, null, this);
-        this.physics.add.collider(player, asteroids, handlePlayerAsteroidCollision, null, this);
-    }
-
-    function update() {
-        // Player movement
-        player.setVelocity(0);
-        if (cursors.left.isDown) {
-            player.setVelocityX(-300);
-        } else if (cursors.right.isDown) {
-            player.setVelocityX(300);
-        }
-
-        if (cursors.up.isDown) {
-            player.setVelocityY(-300);
-        } else if (cursors.down.isDown) {
-            player.setVelocityY(300);
-        }
-
-        // Shooting
-        if (cursors.space.isDown) {
-            shootBullet(this);
-        }
-
-        // Wrap asteroids around screen
-        asteroids.children.entries.forEach(asteroid => {
-            if (asteroid.x > WINDOW_WIDTH) asteroid.x = 0;
-            if (asteroid.x < 0) asteroid.x = WINDOW_WIDTH;
-            if (asteroid.y > WINDOW_HEIGHT) asteroid.y = 0;
-            if (asteroid.y < 0) asteroid.y = WINDOW_HEIGHT;
-        });
-    }
-
-    function createAsteroid(scene) {
-        const x = Phaser.Math.Between(0, WINDOW_WIDTH);
-        const y = Phaser.Math.Between(0, WINDOW_HEIGHT/2);
-        const asteroid = scene.physics.add.sprite(x, y, 'asteroid');
-        asteroid.setVelocity(
-            Phaser.Math.Between(-100, 100), 
-            Phaser.Math.Between(-100, 100)
-        );
-        asteroids.add(asteroid);
-    }
-
-    function shootBullet(scene) {
-        // Prevent rapid fire
-        if (scene.time.now > (scene.lastBulletTime || 0) + 250) {
-            const bullet = scene.physics.add.sprite(player.x, player.y, 'bullet');
-            bullet.setVelocityY(-400);
-            bullets.add(bullet);
-            scene.lastBulletTime = scene.time.now;
-
-            // Remove bullet when out of bounds
-            scene.time.delayedCall(2000, () => {
-                if (bullet.active) bullet.destroy();
-            });
-        }
-    }
-
-    function handleBulletAsteroidCollision(bullet, asteroid) {
-        bullet.destroy();
-        asteroid.destroy();
-        
-        // Increase score
-        score += 10;
-        scoreText.setText('Score: ' + score);
-
-        // Spawn new asteroid
-        createAsteroid(this);
-
-        // Split asteroid (simplified)
-        if (Math.random() < 0.5) {
-            createAsteroid(this);
-        }
-    }
-
-    function handlePlayerAsteroidCollision(player, asteroid) {
-        asteroid.destroy();
-        
-        // Reduce lives
-        lives--;
-        livesText.setText('Lives: ' + lives);
-
-        // Game over check
-        if (lives <= 0) {
-            this.scene.restart();
-            lives = 3;
-            score = 0;
-        }
-    }
     </script>
 </body>
 </html>
