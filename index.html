@@ -36,24 +36,23 @@
     const WINDOW_WIDTH = window.innerWidth > 800 ? 800 : window.innerWidth - 20;
     const WINDOW_HEIGHT = window.innerHeight > 600 ? 600 : window.innerHeight - 100;
 
-    // Game States
-    const MENU = 0;
-    const PLAYING = 1;
-    const GAME_OVER = 2;
-
     class SpaceShooterScene extends Phaser.Scene {
         constructor() {
             super('SpaceShooterScene');
-            this.state = MENU;
-            this.score = 0;
-            this.highScore = 0;
-            this.level = 1;
+            this.gameState = {
+                score: 0,
+                lives: 3,
+                level: 1,
+                isInvulnerable: false
+            };
         }
 
         preload() {
-            // Load images from GitHub Pages relative path
+            // Load images
             this.load.image('ship', 'static/player_ship.png');
-            this.load.image('asteroid', 'static/asteroid.png');
+            this.load.image('asteroid_large', 'static/asteroid.png');
+            this.load.image('asteroid_medium', 'static/asteroid.png');
+            this.load.image('asteroid_small', 'static/asteroid.png');
             this.load.image('bullet', 'static/bullet.png');
         }
 
@@ -61,98 +60,79 @@
             // Background
             this.cameras.main.setBackgroundColor('#000000');
 
-            // Create groups
+            // Create physics groups
             this.asteroidsGroup = this.physics.add.group();
             this.bulletsGroup = this.physics.add.group();
 
             // Create player
             this.createPlayer();
 
-            // Text
-            this.scoreText = this.add.text(16, 16, 'Score: 0', { fontSize: '24px', fill: '#fff' });
-            this.levelText = this.add.text(16, 50, 'Level: 1', { fontSize: '24px', fill: '#fff' });
-            this.livesText = this.add.text(16, 84, 'Lives: 3', { fontSize: '24px', fill: '#fff' });
-
-            // Menu text
-            this.menuText = this.add.text(
-                WINDOW_WIDTH / 2, 
-                WINDOW_HEIGHT / 2, 
-                'SPACE SHOOTER\n\nPress SPACE to Start', 
-                { 
-                    fontSize: '32px', 
-                    fill: '#fff', 
-                    align: 'center' 
-                }
-            ).setOrigin(0.5);
+            // Text displays
+            this.createHUD();
 
             // Input
-            this.cursors = this.input.keyboard.createCursorKeys();
-            this.aKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
-            this.dKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
-            this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+            this.createInputs();
 
             // Collision detection
-            this.physics.add.collider(this.bulletsGroup, this.asteroidsGroup, this.handleBulletAsteroidCollision, null, this);
-            this.physics.add.collider(this.player, this.asteroidsGroup, this.handlePlayerAsteroidCollision, null, this);
-        }
-
-        createPlayer() {
-            // Create player at the bottom center of the screen
-            this.player = this.physics.add.sprite(WINDOW_WIDTH / 2, WINDOW_HEIGHT - 100, 'ship');
-            this.player.setCollideWorldBounds(true);
-            
-            // Player properties
-            this.player.lives = 3;
-            this.player.angle = 0;
-            this.player.invulnerable = false;
-            this.player.invulnerableTimer = 0;
-        }
-
-        update(time, delta) {
-            if (this.state === MENU) {
-                this.handleMenuInput();
-                return;
-            }
-
-            if (this.state === PLAYING) {
-                this.handlePlayerMovement();
-                this.handleShooting();
-                this.wrapAsteroids();
-                this.handlePlayerInvulnerability(time);
-            }
-        }
-
-        handleMenuInput() {
-            if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
-                this.startNewGame();
-            }
-        }
-
-        startNewGame() {
-            this.state = PLAYING;
-            this.score = 0;
-            this.level = 1;
-            this.scoreText.setText('Score: 0');
-            this.levelText.setText('Level: 1');
-            this.livesText.setText('Lives: 3');
-            this.menuText.setVisible(false);
-
-            // Clear existing asteroids and bullets
-            this.asteroidsGroup.clear(true, true);
-            this.bulletsGroup.clear(true, true);
-
-            // Reset player
-            if (this.player) this.player.destroy();
-            this.createPlayer();
+            this.physics.add.collider(
+                this.bulletsGroup, 
+                this.asteroidsGroup, 
+                this.handleBulletAsteroidCollision, 
+                null, 
+                this
+            );
+            this.physics.add.overlap(
+                this.player, 
+                this.asteroidsGroup, 
+                this.handlePlayerAsteroidCollision, 
+                null, 
+                this
+            );
 
             // Spawn initial asteroids
             this.spawnInitialAsteroids(5);
         }
 
-        handlePlayerMovement() {
-            // Reset velocity
-            this.player.setVelocity(0);
+        createPlayer() {
+            this.player = this.physics.add.sprite(
+                WINDOW_WIDTH / 2, 
+                WINDOW_HEIGHT - 100, 
+                'ship'
+            );
+            this.player.setCollideWorldBounds(true);
+            this.player.setDrag(100);
+            this.player.setMaxVelocity(300);
+        }
 
+        createHUD() {
+            this.scoreText = this.add.text(16, 16, 'Score: 0', { 
+                fontSize: '24px', 
+                fill: '#fff' 
+            });
+            this.livesText = this.add.text(16, 50, `Lives: ${this.gameState.lives}`, { 
+                fontSize: '24px', 
+                fill: '#fff' 
+            });
+            this.levelText = this.add.text(16, 84, `Level: ${this.gameState.level}`, { 
+                fontSize: '24px', 
+                fill: '#fff' 
+            });
+        }
+
+        createInputs() {
+            this.cursors = this.input.keyboard.createCursorKeys();
+            this.aKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
+            this.dKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
+            this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+        }
+
+        update(time) {
+            this.handlePlayerMovement();
+            this.handleShooting();
+            this.wrapWorldBounds(this.asteroidsGroup);
+        }
+
+        handlePlayerMovement() {
             // Movement
             if (this.cursors.left.isDown) {
                 this.player.setVelocityX(-300);
@@ -176,7 +156,7 @@
         }
 
         handleShooting() {
-            if (this.spaceKey.isDown) {
+            if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
                 this.shootBullet();
             }
         }
@@ -184,12 +164,10 @@
         shootBullet() {
             const time = this.time.now;
             if (!this.lastBulletTime || time - this.lastBulletTime > 250) {
-                // Calculate bullet spawn position based on ship's rotation
+                const bullet = this.bulletsGroup.create(this.player.x, this.player.y, 'bullet');
+                
+                // Calculate bullet velocity based on ship's angle
                 const angle = Phaser.Math.DegToRad(this.player.angle - 90);
-                const bulletX = this.player.x + Math.cos(angle) * 25;
-                const bulletY = this.player.y + Math.sin(angle) * 25;
-
-                const bullet = this.bulletsGroup.create(bulletX, bulletY, 'bullet');
                 bullet.setVelocity(
                     Math.cos(angle) * 500, 
                     Math.sin(angle) * 500
@@ -210,119 +188,129 @@
             }
         }
 
-        spawnAsteroid(size) {
-            // Spawn at the edge of the screen
-            const side = Phaser.Math.Between(0, 3);
-            let x, y;
-
-            switch(side) {
-                case 0: // Top
-                    x = Phaser.Math.Between(0, WINDOW_WIDTH);
-                    y = -50;
-                    break;
-                case 1: // Right
-                    x = WINDOW_WIDTH + 50;
-                    y = Phaser.Math.Between(0, WINDOW_HEIGHT);
-                    break;
-                case 2: // Bottom
-                    x = Phaser.Math.Between(0, WINDOW_WIDTH);
-                    y = WINDOW_HEIGHT + 50;
-                    break;
-                case 3: // Left
-                    x = -50;
-                    y = Phaser.Math.Between(0, WINDOW_HEIGHT);
-                    break;
+        spawnAsteroid(size, x = null, y = null) {
+            // If no position provided, spawn at screen edge
+            if (x === null || y === null) {
+                const side = Phaser.Math.Between(0, 3);
+                switch(side) {
+                    case 0: // Top
+                        x = Phaser.Math.Between(0, WINDOW_WIDTH);
+                        y = -50;
+                        break;
+                    case 1: // Right
+                        x = WINDOW_WIDTH + 50;
+                        y = Phaser.Math.Between(0, WINDOW_HEIGHT);
+                        break;
+                    case 2: // Bottom
+                        x = Phaser.Math.Between(0, WINDOW_WIDTH);
+                        y = WINDOW_HEIGHT + 50;
+                        break;
+                    case 3: // Left
+                        x = -50;
+                        y = Phaser.Math.Between(0, WINDOW_HEIGHT);
+                        break;
+                }
             }
 
-            const asteroid = this.asteroidsGroup.create(x, y, 'asteroid');
+            // Select appropriate image based on size
+            const asteroidImage = size === 3 ? 'asteroid_large' : 
+                                  size === 2 ? 'asteroid_medium' : 
+                                  'asteroid_small';
+
+            const asteroid = this.asteroidsGroup.create(x, y, asteroidImage);
             
-            // Set asteroid properties
+            // Set custom properties
             asteroid.size = size;
-            asteroid.setScale(size / 3);  // Adjust size visually
-            
+            asteroid.setScale(size / 3);  // Adjust visual size
+
             // Random movement
-            const speed = 4 - size;
+            const speed = 100 * (4 - size);
             const angle = Phaser.Math.DegToRad(Phaser.Math.Between(0, 360));
             asteroid.setVelocity(
-                Math.cos(angle) * speed * 100, 
-                Math.sin(angle) * speed * 100
+                Math.cos(angle) * speed, 
+                Math.sin(angle) * speed
             );
             asteroid.setAngularVelocity(Phaser.Math.Between(-50, 50));
         }
 
-        wrapAsteroids() {
-            this.asteroidsGroup.children.entries.forEach(asteroid => {
-                if (asteroid.x > WINDOW_WIDTH) asteroid.x = 0;
-                if (asteroid.x < 0) asteroid.x = WINDOW_WIDTH;
-                if (asteroid.y > WINDOW_HEIGHT) asteroid.y = 0;
-                if (asteroid.y < 0) asteroid.y = WINDOW_HEIGHT;
+        wrapWorldBounds(group) {
+            group.children.entries.forEach(obj => {
+                if (obj.x > WINDOW_WIDTH) obj.x = 0;
+                if (obj.x < 0) obj.x = WINDOW_WIDTH;
+                if (obj.y > WINDOW_HEIGHT) obj.y = 0;
+                if (obj.y < 0) obj.y = WINDOW_HEIGHT;
             });
         }
 
-        handlePlayerInvulnerability(time) {
-            if (this.player.invulnerable) {
-                // Check if invulnerability period is over
-                if (time - this.player.invulnerableTimer > 3000) {
-                    this.player.invulnerable = false;
-                    this.player.setAlpha(1);
-                } else {
-                    // Make player flash
-                    this.player.setAlpha(Math.sin(time * 0.1) > 0 ? 1 : 0.5);
-                }
-            }
-        }
-
         handleBulletAsteroidCollision(bullet, asteroid) {
+            // Destroy bullet
             bullet.destroy();
 
-            // Reduce asteroid size
+            // Increase score
+            this.gameState.score += (4 - asteroid.size) * 100;
+            this.scoreText.setText(`Score: ${this.gameState.score}`);
+
+            // Split asteroid if not smallest
             if (asteroid.size > 1) {
                 // Spawn two smaller asteroids
-                this.spawnAsteroid(asteroid.size - 1);
-                this.spawnAsteroid(asteroid.size - 1);
+                this.spawnAsteroid(asteroid.size - 1, asteroid.x, asteroid.y);
+                this.spawnAsteroid(asteroid.size - 1, asteroid.x, asteroid.y);
             }
 
-            // Destroy the original asteroid
+            // Destroy original asteroid
             asteroid.destroy();
 
-            // Increase score
-            this.score += (4 - asteroid.size) * 100;
-            this.scoreText.setText(`Score: ${this.score}`);
-
-            // Update high score
-            if (this.score > this.highScore) {
-                this.highScore = this.score;
-            }
-
-            // Level progression
+            // Check if all asteroids destroyed
             if (this.asteroidsGroup.getChildren().length === 0) {
-                this.level++;
-                this.levelText.setText(`Level: ${this.level}`);
-                this.spawnInitialAsteroids(3 + this.level);
+                this.gameState.level++;
+                this.levelText.setText(`Level: ${this.gameState.level}`);
+                this.spawnInitialAsteroids(3 + this.gameState.level);
             }
         }
 
         handlePlayerAsteroidCollision(player, asteroid) {
-            // Only process collision if not invulnerable
-            if (!player.invulnerable) {
+            // Only process if not already invulnerable
+            if (!this.gameState.isInvulnerable) {
                 // Destroy asteroid
                 asteroid.destroy();
 
                 // Reduce lives
-                player.lives--;
-                this.livesText.setText(`Lives: ${player.lives}`);
+                this.gameState.lives--;
+                this.livesText.setText(`Lives: ${this.gameState.lives}`);
 
-                // Make player invulnerable
-                player.invulnerable = true;
-                player.invulnerableTimer = this.time.now;
+                // Make player invulnerable temporarily
+                this.gameState.isInvulnerable = true;
+                player.setAlpha(0.5);  // Visual indication of invulnerability
+
+                // Reset player position
+                player.setPosition(WINDOW_WIDTH / 2, WINDOW_HEIGHT - 100);
+
+                // Reset invulnerability after 3 seconds
+                this.time.delayedCall(3000, () => {
+                    this.gameState.isInvulnerable = false;
+                    player.setAlpha(1);
+                });
 
                 // Check game over
-                if (player.lives <= 0) {
-                    this.state = MENU;
-                    this.menuText.setText(`GAME OVER\n\nScore: ${this.score}\nHigh Score: ${this.highScore}\n\nPress SPACE to Restart`);
-                    this.menuText.setVisible(true);
+                if (this.gameState.lives <= 0) {
+                    this.gameOver();
                 }
             }
+        }
+
+        gameOver() {
+            // Stop the game
+            this.scene.restart();
+
+            // Reset game state
+            this.gameState.lives = 3;
+            this.gameState.score = 0;
+            this.gameState.level = 1;
+
+            // Update HUD
+            this.livesText.setText(`Lives: ${this.gameState.lives}`);
+            this.scoreText.setText('Score: 0');
+            this.levelText.setText('Level: 1');
         }
     }
 
