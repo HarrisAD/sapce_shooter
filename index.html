@@ -74,7 +74,7 @@
             this.createInputs();
 
             // Collision detection
-            this.physics.add.collider(
+            this.physics.add.overlap(
                 this.bulletsGroup, 
                 this.asteroidsGroup, 
                 this.handleBulletAsteroidCollision, 
@@ -164,10 +164,13 @@
         shootBullet() {
             const time = this.time.now;
             if (!this.lastBulletTime || time - this.lastBulletTime > 250) {
-                const bullet = this.bulletsGroup.create(this.player.x, this.player.y, 'bullet');
-                
-                // Calculate bullet velocity based on ship's angle
+                // Calculate bullet spawn position based on ship's rotation
                 const angle = Phaser.Math.DegToRad(this.player.angle - 90);
+                const bulletX = this.player.x + Math.cos(angle) * 25;
+                const bulletY = this.player.y + Math.sin(angle) * 25;
+
+                const bullet = this.bulletsGroup.create(bulletX, bulletY, 'bullet');
+                
                 bullet.setVelocity(
                     Math.cos(angle) * 500, 
                     Math.sin(angle) * 500
