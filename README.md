@@ -8,4 +8,4 @@ A browser-based space shooter game built with Phaser.js.
 - Spacebar to Shoot
 
 ## Play Online
-Play the game at: [https://YOUR-GITHUB-USERNAME.github.io/space-shooter/](https://harrisad.github.io/sapce_shooter/)
+Play the game at: [Space Shooter](https://harrisad.github.io/sapce_shooter/)
