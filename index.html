@@ -48,8 +48,7 @@
                 lives: 3,
                 level: 1,
                 isInvulnerable: false,
-                gameOver: false,
-                hasRestarted: false  // New flag to track restarts
+                gameOver: false
             };
         }
 
@@ -306,11 +305,6 @@
         }
 
         handlePlayerAsteroidCollision(player, asteroid) {
-            // Reset invulnerability after first game
-            if (this.gameState.hasRestarted) {
-                this.gameState.isInvulnerable = false;
-            }
-
             // Only process if not already invulnerable and game is not over
             if (!this.gameState.isInvulnerable && !this.gameState.gameOver) {
                 // Destroy asteroid
@@ -356,8 +350,7 @@
         restartGame() {
             // Reset game state
             this.resetGameState();
-            this.gameState.hasRestarted = true;  // Mark as restarted
-
+            
             // Hide game over text
             this.gameOverText.setVisible(false);
 
