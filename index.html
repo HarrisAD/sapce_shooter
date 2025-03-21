@@ -48,7 +48,8 @@
                 lives: 3,
                 level: 1,
                 isInvulnerable: false,
-                gameOver: false
+                gameOver: false,
+                hasRestarted: false  // New flag to track restarts
             };
         }
 
@@ -82,14 +83,14 @@
             this.createInputs();
 
             // Collision detection
-            this.physics.add.overlap(
+            this.bulletAsteroidCollider = this.physics.add.overlap(
                 this.bulletsGroup, 
                 this.asteroidsGroup, 
                 this.handleBulletAsteroidCollision, 
                 null, 
                 this
             );
-            this.physics.add.overlap(
+            this.playerAsteroidCollider = this.physics.add.overlap(
                 this.player, 
                 this.asteroidsGroup, 
                 this.handlePlayerAsteroidCollision, 
@@ -305,6 +306,11 @@
         }
 
         handlePlayerAsteroidCollision(player, asteroid) {
+            // Reset invulnerability after first game
+            if (this.gameState.hasRestarted) {
+                this.gameState.isInvulnerable = false;
+            }
+
             // Only process if not already invulnerable and game is not over
             if (!this.gameState.isInvulnerable && !this.gameState.gameOver) {
                 // Destroy asteroid
@@ -350,6 +356,7 @@
         restartGame() {
             // Reset game state
             this.resetGameState();
+            this.gameState.hasRestarted = true;  // Mark as restarted
 
             // Hide game over text
             this.gameOverText.setVisible(false);
